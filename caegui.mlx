@@ -1,29 +1,36 @@
-clear;
-clc;
-
-[data, txt, raw] = xlsread('data_structure_rigid_plane_frames_q1.xlsx', 'Sheet1','A1:L11');
-
+clear all;
+data = readmatrix('data_structure_rigid_plane_frames_q1.xlsx');
 n_element = data(1,1);
 n_nodes = data(1,2);
 E_ym = data(1,7);
+E_ym_multiplier = data(1,13);
+E = E_ym*10^E_ym_multiplier;
 Area = data(:,8);
 nodeConnections = [data(:,3), data(:,4)];
 X_Coords = data(:,5);
 Y_Coords = data(:,6);
 NDU = data(1,10);
 dzero = data(1:NDU,11); %first element should be NDU
-F = data(:,9)
-%Preprocess
+F = data(:,9);
 
 %Initiate matrices
 KE = zeros(4);
 K = zeros(2*n_nodes);
-KT = zeros(2*n_nodes);
-
 area = Area(1);%debugging
-
 % Pre-Processing
 % i.e. read element data and create elemental stiffness matrices
+
+for i = 1:n_element
+    n1 = nodeConnections(i,1);
+    n2 = nodeConnections(i,2);
+    x1 = X_Coords(n1);
+    x2 = X_Coords(n2);
+    y1 = Y_Coords(n1);
+    y2 = Y_Coords(n2);
+    plot ([x1,x2], [y1,y2], 'LineWidth', 4);
+    hold on;
+end
+hold off;
 
 for i = 1:n_element
 
@@ -72,26 +79,26 @@ for i = 1:n_element
             K(MI,MJ) = K(MI,MJ) + KE(IX,JX);
         end
     end
-
 end
 
-%Solve
+%solve
+
+
 KT = K;
 
 for k = 1:NDU
     n = dzero(k);
-    disp(n);
     KT(n,:) = 0;
     KT(:,n) = 0;
-    KT(n,n) = 1
+    KT(n,n) = 1;
 end
 
 % Calculate Unknown displacements and reaction forces
 
-%d = inv(KT)*F;
-d = KT\F
+d = inv(KT)*F;
+%d = KT\F
 F = K*d
-Post Process
+
 for i = 1:n_element
     n1 = nodeConnections(i,1);
     n2 = nodeConnections(i,2);
@@ -105,17 +112,7 @@ for i = 1:n_element
     u2 = d(2*n2 - 1);
     v2 = d(2*n2);
 
-
-    if ((x2 - x1)==0)
-        if(y2>y1)
-            alpha = pi/2;
-        else
-            alpha = -pi/2;
-        end
-    else
-        alpha = atan((y2-y1)/(x2-x1));
-
-    end
+    alpha = atan2((y2-y1),(x2-x1));
 
     c = cos(alpha);
     s = sin(alpha);
@@ -128,7 +125,7 @@ end
 
 FR = FR.';
 Sigma = Sigma.';%transpose sigma
-%Display
+
 % Display Structural Deformation
 
 % Graphical presentation of Structural Deformation
@@ -139,8 +136,8 @@ for i = 1:n_nodes
     v(i) = d(2*i);
 end
 for i = 1:n_nodes
-    Xnew(i) = X_Coords(i) + 1000*u(i);
-    Ynew(i) = Y_Coords(i) + 1000*v(i);
+    Xnew(i) = X_Coords(i) + u(i);
+    Ynew(i) = Y_Coords(i) + v(i);
 end
 
 %Display Distorted structure superimposed on original structure
