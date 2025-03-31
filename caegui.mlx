@@ -1,0 +1,170 @@
+clear;
+clc;
+
+[data, txt, raw] = xlsread('data_structure_rigid_plane_frames_q1.xlsx', 'Sheet1','A1:L11');
+
+n_element = data(1,1);
+n_nodes = data(1,2);
+E_ym = data(1,7);
+Area = data(:,8);
+nodeConnections = [data(:,3), data(:,4)];
+X_Coords = data(:,5);
+Y_Coords = data(:,6);
+NDU = data(1,10);
+dzero = data(1:NDU,11); %first element should be NDU
+F = data(:,9)
+%Preprocess
+
+%Initiate matrices
+KE = zeros(4);
+K = zeros(2*n_nodes);
+KT = zeros(2*n_nodes);
+
+area = Area(1);%debugging
+
+% Pre-Processing
+% i.e. read element data and create elemental stiffness matrices
+
+for i = 1:n_element
+
+    % Evaluate elental stiffness matrices
+
+    n1 = nodeConnections(i,1); % 1st element 1st node
+    n2 = nodeConnections(i,2); % 2nd element 2nd node
+    x1 = X_Coords(n1);
+    x2 = X_Coords(n2);
+    y1 = Y_Coords(n1);
+    y2 = Y_Coords(n2);
+
+    %Initiation and Pre-processing
+    alpha = atan((y2-y1)/(x2-x1));
+
+
+    c = cos(alpha);
+    s = sin(alpha);
+
+    L = sqrt((x2-x1)^2+(y2-y1)^2);
+
+    const = (area*E_ym)/L;
+    KE = [c*c c*s -c*c -c*s;
+        c*s s*s -c*s -s*s;
+        -c*c -c*s c*c c*s;
+        -c*s -s*s c*s s*s];
+
+    KE = const*KE;
+
+    % Assembly
+    % Assemble into overall stiffness matrix
+
+    j = n1;
+    k = n2;
+
+    II(1) = (2*j) - 1;
+    II(2) = (2*j);
+    II(3) = (2*k) - 1;
+    II(4) = (2*k);
+
+    for IX = 1:4
+        MI = II(IX);
+        for JX = 1:4
+            MJ = II(JX);
+
+            K(MI,MJ) = K(MI,MJ) + KE(IX,JX);
+        end
+    end
+
+end
+
+%Solve
+KT = K;
+
+for k = 1:NDU
+    n = dzero(k);
+    disp(n);
+    KT(n,:) = 0;
+    KT(:,n) = 0;
+    KT(n,n) = 1
+end
+
+% Calculate Unknown displacements and reaction forces
+
+%d = inv(KT)*F;
+d = KT\F
+F = K*d
+Post Process
+for i = 1:n_element
+    n1 = nodeConnections(i,1);
+    n2 = nodeConnections(i,2);
+    x1 = X_Coords(n1);
+    x2 = X_Coords(n2);
+    y1 = Y_Coords(n1);
+    y2 = Y_Coords(n2);
+
+    u1 = d(2*n1 - 1);
+    v1 = d(2*n1);
+    u2 = d(2*n2 - 1);
+    v2 = d(2*n2);
+
+
+    if ((x2 - x1)==0)
+        if(y2>y1)
+            alpha = pi/2;
+        else
+            alpha = -pi/2;
+        end
+    else
+        alpha = atan((y2-y1)/(x2-x1));
+
+    end
+
+    c = cos(alpha);
+    s = sin(alpha);
+
+    L = sqrt((x2-x1)^2+(y2-y1)^2);
+
+    FR(i) = (Area(i)*E_ym/L)*(((u2-u1)*c)+((v2-v1)*s));
+    Sigma(i) = FR(i)/Area(i);
+end
+
+FR = FR.';
+Sigma = Sigma.';%transpose sigma
+%Display
+% Display Structural Deformation
+
+% Graphical presentation of Structural Deformation
+% Evaluate new nodal coordinates
+
+for i = 1:n_nodes
+    u(i) = d(2*i-1);
+    v(i) = d(2*i);
+end
+for i = 1:n_nodes
+    Xnew(i) = X_Coords(i) + 1000*u(i);
+    Ynew(i) = Y_Coords(i) + 1000*v(i);
+end
+
+%Display Distorted structure superimposed on original structure
+for i = 1:n_element
+    n1 = nodeConnections(i,1);
+    n2 = nodeConnections(i,2);
+    x1 = X_Coords(n1);
+    x2 = X_Coords(n2);
+    y1 = Y_Coords(n1);
+    y2 = Y_Coords(n2);
+
+    plot ([x1,x2], [y1,y2], 'LineWidth', 1);
+    hold on;
+    plot ([x1,x2], [y1,y2], 'ro');
+    hold on;
+
+    x1 = Xnew(n1);
+    x2 = Xnew(n2);
+    y1 = Ynew(n1);
+    y2 = Ynew(n2);
+
+    plot ([x1,x2], [y1,y2], 'LineWidth', 10);
+    hold on;
+    plot  ([x1,x2], [y1,y2], 'ro');
+    hold on;
+
+end
