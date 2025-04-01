@@ -1,6 +1,8 @@
-clear all;
+clear;
+clc;
+scaling_factor = 1; %will be a setting in gui
 
-data = readmatrix('data_structure_rigid_plane_frames_q1.xlsx');
+data = readmatrix('data_structure_rigid_plane_frames_q3.xlsx');
 
 n_element = data(1,1);
 n_nodes = data(1,2);
@@ -19,9 +21,10 @@ NDU = data(1,10);
 dzero = data(1:NDU,11); %first element should be NDU
 
 F = data(:,9);
+q_xy = data(:, 14);
 
 moments = data(:,12);
-I = data(1,13);
+I = data(:,13);
 
 %Initiate matrices
 KE = zeros(6);
@@ -38,6 +41,8 @@ for i = 1:n_element
     plot ([x1,x2], [y1,y2], 'LineWidth', 4);
     hold on;
 end
+%make it look pretty
+axis equal;
 hold off;
 for i = 1:n_element
 
@@ -60,13 +65,13 @@ for i = 1:n_element
 
     const = E/L;
 
-    KE =    [(Area(i)*c^2+((12*I*s^2)/L^2)), (Area(i)-(12*I/L^2))*c*s, -(6*I*s/L), -(Area(i)*c^2+((12*I*s^2)/L^2)), -(Area(i)-(12*I/L^2))*c*s, -(6*I*s/L);
-            (Area(i)-(12*I/L^2))*c*s, (Area(i)*s^2+((12*I*c^2)/L^2)), (6*I*c/L), -(Area(i)-(12*I/L^2))*c*s, -(Area(i)*s^2+((12*I*c^2)/L^2)), (6*I*c/L);
-            -(6*I*s/L), (6*I*c/L), 4*I, 6*I*s/L, -(6*I*c/L), 2*I;  
+    KE =    [(Area(i)*c^2+((12*I(i)*s^2)/L^2)), (Area(i)-(12*I(i)/L^2))*c*s, -(6*I(i)*s/L), -(Area(i)*c^2+((12*I(i)*s^2)/L^2)), -(Area(i)-(12*I(i)/L^2))*c*s, -(6*I(i)*s/L);
+            (Area(i)-(12*I(i)/L^2))*c*s, (Area(i)*s^2+((12*I(i)*c^2)/L^2)), (6*I(i)*c/L), -(Area(i)-(12*I(i)/L^2))*c*s, -(Area(i)*s^2+((12*I(i)*c^2)/L^2)), (6*I(i)*c/L);
+            -(6*I(i)*s/L), (6*I(i)*c/L), 4*I(i), 6*I(i)*s/L, -(6*I(i)*c/L), 2*I(i);  
 
-            -(Area(i)*c^2+((12*I*s^2)/L^2)), -(Area(i)-(12*I/L^2))*c*s, (6*I*s/L), (Area(i)*c^2+((12*I*s^2)/L^2)), (Area(i)-(12*I/L^2))*c*s, (6*I*s/L);
-            -(Area(i)-(12*I/L^2))*c*s, -(Area(i)*s^2+((12*I*c^2)/L^2)), -(6*I*c/L), (Area(i)-(12*I/L^2))*c*s, (Area(i)*s^2+((12*I*c^2)/L^2)), -(6*I*c/L);
-            -(6*I*s/L), (6*I*c/L), 2*I, 6*I*s/L, -(6*I*c/L), 4*I];
+            -(Area(i)*c^2+((12*I(i)*s^2)/L^2)), -(Area(i)-(12*I(i)/L^2))*c*s, (6*I(i)*s/L), (Area(i)*c^2+((12*I(i)*s^2)/L^2)), (Area(i)-(12*I(i)/L^2))*c*s, (6*I(i)*s/L);
+            -(Area(i)-(12*I(i)/L^2))*c*s, -(Area(i)*s^2+((12*I(i)*c^2)/L^2)), -(6*I(i)*c/L), (Area(i)-(12*I(i)/L^2))*c*s, (Area(i)*s^2+((12*I(i)*c^2)/L^2)), -(6*I(i)*c/L);
+            -(6*I(i)*s/L), (6*I(i)*c/L), 2*I(i), 6*I(i)*s/L, -(6*I(i)*c/L), 4*I(i)];
     
     KE = const*KE;
 
@@ -95,6 +100,60 @@ end
 
 %solve
 KT = K;
+ 
+%account for distributed loads
+for i = 1:n_element
+    
+    qx = q_xy(2*i - 1); 
+    qy = q_xy(2*i);     
+    
+    % skip if no distributed load
+    if qx == 0 && qy == 0
+        continue;
+    end
+   
+    n1 = nodeConnections(i, 1);
+    n2 = nodeConnections(i, 2);
+    x1 = X_Coords(n1);
+    y1 = Y_Coords(n1);
+    x2 = X_Coords(n2);
+    y2 = Y_Coords(n2);
+    L = sqrt((x2 - x1)^2 + (y2 - y1)^2);
+    alpha = atan2((y2 - y1), (x2 - x1));
+    c = cos(alpha);
+    s = sin(alpha);
+     
+    % Equivalent local nodal forces and moments for distributed loads
+    F_local = [
+    qx * L / 2;   
+    qy * L / 2;   
+    -qy * L^2 / 12 - qx * L^2 / 12; 
+    qx * L / 2;    
+    qy * L / 2;    
+    qy * L^2 / 12 + qx * L^2 / 12  
+    ];
+    
+    % Transformation to global coordinate system
+    T = [
+    s,  c,   0,  0,   0,   0;
+    -c,  s,   0,  0,   0,   0;
+    0,  0,   1,  0,   0,   0;
+    0,  0,   0,  s,   c,   0;
+    0,  0,   0, -c,   s,   0;
+    0,  0,   0,  0,   0,   1  
+    ];
+    T(abs(T) < 1e-9) = 0 ; 
+
+    % Transform local forces to global system
+    F_global = T * F_local;
+
+    % Assemble into global force vector
+    indices = [3*n1-2, 3*n1-1, 3*n1, 3*n2-2, 3*n2-1, 3*n2];
+
+    for j = 1:6
+        F(indices(j)) = F(indices(j)) + F_global(j);
+    end
+end
 
 for k = 1:NDU
     n = dzero(k);
@@ -102,11 +161,28 @@ for k = 1:NDU
     KT(:,n) = 0;
     KT(n,n) = 1;
 end
+num_bends = sum(F(3:3:end) ~= 0);
+num_dists = sum(abs(q_xy)>0);
+
+no_bending = num_bends == 0 && num_dists == 0;
+if no_bending 
+    for i = 1:n_nodes
+        theta_index = 3 * i;
+        K(theta_index, :) = 0;
+        K(:, theta_index) = 0;
+        K(theta_index, theta_index) = 1;
+        KT(theta_index, :) = 0;
+        KT(:, theta_index) = 0;
+        KT(theta_index, theta_index) = 1;
+    end
+end
 
 % Calculate Unknown displacements and reaction forces
-KTinv = inv(KT);
-d = KTinv*F;
-%d = KT\F
+%d = inv(KT)*F;
+d = KT\F;%matlab recommedns this instead of inv(A)*b
+for i = 1:NDU
+    d(dzero(i)) = 0;
+end
 F = K*d;
 
 for i = 1:n_element
@@ -148,11 +224,13 @@ for i = 1:n_nodes
 end
 
 for i = 1:n_nodes
-     Xnew(i) = X_Coords(i) + 1000*u(i);
-     Ynew(i) = Y_Coords(i) + 1000*v(i);
+     Xnew(i) = X_Coords(i) + scaling_factor*u(i);
+     Ynew(i) = Y_Coords(i) + scaling_factor*v(i);
 end
 
 interps = 10; %number of interpolation points per element, arbitrary
+s = linspace(0, 1, interps);
+
 
 for i = 1:n_element
     %assign all data required for plotting
@@ -171,16 +249,35 @@ for i = 1:n_element
     theta2 = m(n2);
 
     L = sqrt((x2 - x1)^2 + (y2 - y1)^2);
-    s = linspace(0, 1, interps);
 
-    scaling_factor = 150; %will be a setting in gui
     
-    %cubic splines
-    Xline = (1 - 3*s.^2 + 2*s.^3) * x1_new + (3*s.^2 - 2*s.^3) * x2_new + (s.^3 - 2*s.^2 + s) * (scaling_factor * theta1 * L) + (s.^3 - s.^2) * (scaling_factor * theta2 * L);
-    Yline = (1 - 3*s.^2 + 2*s.^3) * y1_new + (3*s.^2 - 2*s.^3) * y2_new + (s.^3 - 2*s.^2 + s) * (scaling_factor * theta1 * L) + (s.^3 - s.^2) * (scaling_factor * theta2 * L);
-    plot(Xline, Yline, 'b', 'LineWidth', 2);
-    hold on;
+    if theta1 == 0 && theta2 == 0
+        plot([x1, x2], [y1, y2], 'k--'); % original structure, with dotted line for readability based on matlab codes for finite element analysis by AJM ferreira
+        hold on;
+        plot ([x1,x2], [y1,y2], 'ro');
+        hold on;
 
-    plot([x1, x2], [y1, y2], 'k--'); % original structure, with dotted line for readability based on matlab codes for finite element analysis by AJM ferreira
-    plot([x1_new, x2_new], [y1_new, y2_new], 'ro'); %deformed structure
+        x1 = Xnew(n1);
+        x2 = Xnew(n2);
+        y1 = Ynew(n1);
+        y2 = Ynew(n2);
+
+        plot ([x1,x2], [y1,y2], 'LineWidth', 2);
+        hold on;
+        plot ([x1,x2], [y1,y2], 'ro');
+        hold on;
+    else
+        %cubic splines
+        Xline = (1 - 3*s.^2 + 2*s.^3) * x1_new + (3*s.^2 - 2*s.^3) * x2_new + (s.^3 - 2*s.^2 + s) * (scaling_factor * theta1 * L) + (s.^3 - s.^2) * (scaling_factor * theta2 * L);
+        Yline = (1 - 3*s.^2 + 2*s.^3) * y1_new + (3*s.^2 - 2*s.^3) * y2_new + (s.^3 - 2*s.^2 + s) * (scaling_factor * theta1 * L) + (s.^3 - s.^2) * (scaling_factor * theta2 * L);
+        plot(Xline, Yline, 'b', 'LineWidth', 2);
+
+    
+        hold on;
+        
+        plot([x1, x2], [y1, y2], 'k--'); % original structure, with dotted line for readability based on matlab codes for finite element analysis by AJM ferreira
+        plot([x1_new, x2_new], [y1_new, y2_new], 'ro'); %deformed structure nodes
+    end
+    axis equal;
+    ylim padded;
 end
