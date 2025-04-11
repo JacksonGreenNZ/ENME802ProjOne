@@ -247,7 +247,7 @@ classdef rigidPlaneFrameModel < handle
             end
 
             %Solve for displacement and force vetors
-            obj.nodal_d = KT\obj.F;
+            obj.nodal_d = KT\obj.F;%this is preferred to inv(KT)*F by matlab
             for i = 1:obj.NDU
                 obj.nodal_d(obj.dzero(i)) = 0;
             end
